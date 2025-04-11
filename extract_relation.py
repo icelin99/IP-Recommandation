@@ -10,8 +10,8 @@ from tqdm import tqdm
 
 class DocumentSimilaritySearch:
     def __init__(self):
-        self.tokenizer = AutoTokenizer.from_pretrained('sentense-transformers/all-MiniLM-L12-v2')
-        self.model = AutoModel.from_pretrained('sentense-transformers/all-MiniLM-L6-v2')
+        self.tokenizer = AutoTokenizer.from_pretrained('sentence-transformers/all-MiniLM-L12-v2')
+        self.model = AutoModel.from_pretrained('sentence-transformers/all-MiniLM-L6-v2')
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model.to(self.device)
     
@@ -295,9 +295,9 @@ def save_document_relations(document_relations, output_file):
         'statistics': {
             'total_relations': len(document_relations),
             'average_similarity': sum(
-                sum(paper['similarity'] for paper in rel['related_papers']) 
+                sum(paper['similarity'] for paper in rel['related_arxiv']) 
                 for rel in document_relations
-            ) / sum(len(rel['related_papers']) for rel in document_relations)
+            ) / sum(len(rel['related_arxiv']) for rel in document_relations)
         }
     }
     with open(output_file, 'w', encoding='utf-8') as f:
