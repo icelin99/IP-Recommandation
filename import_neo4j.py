@@ -78,13 +78,17 @@ class Neo4jImporter:
                         'sentence': relation['sentence']
                     })
 
-    def import_document_relations(self,document_relations):
+    def import_document_relations(self, document_relations_file):
         """导入文档相似度关系"""
+        # 首先加载 JSON 文件
+        with open(document_relations_file, 'r', encoding='utf-8') as f:
+            relations_data = json.load(f)
+        
         with self.driver.session() as session:
             session.run("CREATE INDEX IF NOT EXISTS FOR (h:HackerNews) ON (h.id)")
             session.run("CREATE INDEX IF NOT EXISTS FOR (a:ArXiv) ON (a.url)")
 
-            for relation in document_relations:
+            for relation in relations_data["document_relations"]:
                 session.run("""
                     MERGE (h:HackerNews {id: $hn_id})
                     SET h.title = $hn_title
@@ -109,10 +113,6 @@ class Neo4jImporter:
 
 
 def main():
-    data = load_data('arxiv_papers_clear.json', 'HackerNews_top500.json')
-    
-    # 查找相关文档
-    document_relations = find_related_documents(data)
     
     importer = Neo4jImporter(
         uri="bolt://localhost:7687",
@@ -124,8 +124,8 @@ def main():
         print("Cleared database")
         importer.import_entities('entity_all.json')
         print("Imported entities")
-        importer.import_relations('relation_analysis.json')
-        print("Imported relations")
+        importer.import_document_relations('document_relations.json')
+        print("Imported document relations")
     finally:
         importer.close()
 
