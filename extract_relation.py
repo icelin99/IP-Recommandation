@@ -66,12 +66,15 @@ def find_related_documents(data_source):
 
     arxiv_texts = []
     arxiv_papers = []
-    for paper in tqdm(data_source['arxiv'], desc="处理arXiv文档"):
+    # 创建id到索引的映射
+    id_to_idx = {}
+    for idx, paper in enumerate(tqdm(data_source['arxiv'], desc="处理arXiv文档")):
         arxiv_texts.append(paper['title'] + ". " + paper['summary'])
         arxiv_papers.append({
-            'url': paper['id'],  # 论文URL
+            'url': str(paper['id']),  # 论文URL
             'title': paper['title']
         })
+        id_to_idx[str(paper['id'])] = idx
     # 获取embeddings
     arxiv_embeddings = similarity_search.get_embedding(arxiv_texts)
 
@@ -99,13 +102,14 @@ def find_related_documents(data_source):
             top_related = [
                 {
                     'arxiv_url': arxiv_papers[idx]['url'],
-                    'similarity': float(1 / (1 + distances[j][k])),
+                    'similarity': float(1 / (1 + distances[j][i])),
                     'paper_title': arxiv_papers[idx]['title']
                 }
                 for i, idx in enumerate(indices[j])
+                if idx < len(arxiv_papers)
             ]
             document_relations.append({
-                'hackernews_id': article_id,
+                'hackernews_id': str(article_id),
                 'hackernews_title': article_title,
                 'related_arxiv': top_related
             })
@@ -304,7 +308,7 @@ def save_document_relations(document_relations, output_file):
     print(f"平均相似度: {output['statistics']['average_similarity']:.3f}")
 
 def main():
-    data = load_data('arxiv_papers_clear.json', 'HackerNews_top500.json')
+    data = load_data('arxiv_papers_clear.json', 'HackerNews_best200.json')
     relations = find_related_documents(data)
     save_document_relations(relations, 'document_relations.json')
 
