@@ -7,11 +7,12 @@ from transformers import AutoTokenizer, AutoModel
 import torch
 import numpy as np
 from tqdm import tqdm
+import sys
 
 class DocumentSimilaritySearch:
     def __init__(self):
         self.tokenizer = AutoTokenizer.from_pretrained('sentence-transformers/all-MiniLM-L12-v2')
-        self.model = AutoModel.from_pretrained('sentence-transformers/all-MiniLM-L6-v2')
+        self.model = AutoModel.from_pretrained('sentence-transformers/all-MiniLM-L12-v2')
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model.to(self.device)
     
@@ -307,10 +308,72 @@ def save_document_relations(document_relations, output_file):
     print(f"总关系数: {output['statistics']['total_relations']}")
     print(f"平均相似度: {output['statistics']['average_similarity']:.3f}")
 
+def calculate_and_save_embeddings(data_source, output_file):
+    similarity_search = DocumentSimilaritySearch()
+    hn_texts = [article['title'] for article in data_source['hackernews']]
+    hn_embeddings = similarity_search.get_embedding(hn_texts)
+    embeddings_data = {
+        'articles': data_source['hackernews'],
+        'embeddings': hn_embeddings.tolist()  # numpy array 转换为 list
+    }
+    with open(output_file, 'w') as f:
+        json.dump(embeddings_data, f)
+    
+    print(f"已保存 {len(hn_texts)} 篇文章的 embeddings")
+
+def search_articles_with_cached_embeddings(query, top_k=10):
+    """使用缓存的 embeddings 进行搜索"""
+    similarity_search = DocumentSimilaritySearch()
+    
+    # 加载缓存的 embeddings
+    with open('article_embeddings.json', 'r') as f:
+        cached_data = json.load(f)
+    
+    articles = cached_data['articles']
+    embeddings = np.array(cached_data['embeddings'])
+    
+    # 计算查询文本的 embedding
+    query_embedding = similarity_search.get_embedding([query])[0]
+
+    # 创建 FAISS 索引
+    dimension = embeddings.shape[1]
+    index = faiss.IndexFlatL2(dimension)
+    index.add(embeddings)
+
+    # 使用 FAISS 搜索最相似的文章
+    distances, indices = index.search(query_embedding, top_k)
+    
+    
+    # 整理结果
+    results = []
+    for i, idx in enumerate(indices[0]):
+        if idx < len(articles):  # 确保索引有效
+            results.append({
+                **articles[idx],
+                'similarity': float(1 / (1 + distances[0][i]))  # 转换距离为相似度
+            })
+    
+    return results
+    
+
 def main():
-    data = load_data('arxiv_papers_clear.json', 'HackerNews_best200.json')
-    relations = find_related_documents(data)
-    save_document_relations(relations, 'document_relations.json')
+    data = load_data('./data/arxiv_papers_clear.json', './data/HackerNews_top500.json')
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'cache_embeddings':
+            # 预计算并缓存 embeddings
+            calculate_and_save_embeddings(data, 'article_embeddings.json')
+        
+        elif sys.argv[1] == 'search':
+            # 使用缓存的 embeddings 进行搜索
+            query = sys.argv[2]
+            sorted_articles = search_articles_with_cached_embeddings(query)
+            with open('sorted_hackernews.json', 'w', encoding='utf-8') as f:
+                json.dump(sorted_articles, f, ensure_ascii=False, indent=2)
+            print(f"搜索结果已保存到 sorted_hackernews.json")
+    else:
+        # 原有的文档关系处理
+        relations = find_related_documents(data)
+        save_document_relations(relations, 'document_relations.json')
 
 if __name__ == "__main__":
     main()
